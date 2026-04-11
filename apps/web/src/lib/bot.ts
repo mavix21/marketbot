@@ -1,13 +1,13 @@
 import { Chat } from "chat";
 import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
-import { createMemoryState } from "@chat-adapter/state-memory";
+import { createRedisState } from "@chat-adapter/state-redis";
 
 export const bot = new Chat({
   userName: "delfos",
   adapters: {
     whatsapp: createWhatsAppAdapter(),
   },
-  state: createMemoryState(),
+  state: createRedisState(),
   logger: "info",
 });
 
