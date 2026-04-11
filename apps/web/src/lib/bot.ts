@@ -24,8 +24,12 @@ bot.onNewMention(async (thread, message) => {
 bot.onSubscribedMessage(async (thread) => {
   await thread.startTyping();
 
-  const allMessagesInThread = thread.allMessages;
-  console.warn("All messages in thread", allMessagesInThread);
+  // Build conversation history from thread messages
+  const messages = [];
+  for await (const msg of thread.allMessages) {
+    messages.push(msg);
+  }
+  console.warn("All messages in thread", messages);
 
   await thread.post({ markdown: "Hello from subscribed message!" });
 });
