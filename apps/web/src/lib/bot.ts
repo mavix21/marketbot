@@ -21,7 +21,7 @@ bot.onNewMention(async (thread, message) => {
   await thread.post({ markdown: `Hola, **${message.author.userName}**!` });
 });
 
-bot.onSubscribedMessage(async (thread) => {
+bot.onSubscribedMessage(async (thread, message) => {
   await thread.startTyping();
 
   // Build conversation history from thread messages
@@ -31,22 +31,27 @@ bot.onSubscribedMessage(async (thread) => {
   }
   console.warn("All messages in thread", messages);
 
-  await thread.post({ markdown: "Hello from subscribed message!" });
-});
+  if (message.text.match(/^card$/i)) {
+    await thread.post(
+      Card({
+        title: "Card Title",
+        children: [
+          "Ejemplo de texto en el card",
+          Actions([
+            Button({ id: "approve", label: "Approve", style: "primary" }),
+            Button({ id: "reject", label: "Reject", style: "danger" }),
+          ]),
+        ],
+      }),
+    );
+    return;
+  }
 
-bot.onNewMessage(/^card$/, async (thread, message) => {
-  console.warn("New message received", message);
+  if (message.text.match(/^ga+$/i)) {
+    await thread.adapter.addReaction(thread.id, message.id, emoji.laugh);
+    await thread.post({ markdown: "GAAAAAAA" });
+    return;
+  }
 
-  await thread.post(
-    Card({
-      title: "Card Title",
-      children: [
-        "Ejemplo de texto en el card",
-        Actions([
-          Button({ id: "approve", label: "Approve", style: "primary" }),
-          Button({ id: "reject", label: "Reject", style: "danger" }),
-        ]),
-      ],
-    }),
-  );
+  await thread.post({ markdown: "Escuchando desde el hilo..." });
 });
