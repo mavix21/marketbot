@@ -11,14 +11,18 @@ export const bot = new Chat({
   logger: "info",
 });
 
-bot.onNewMention(async (thread, _message) => {
+bot.onNewMention(async (thread, message) => {
   const channel = thread.channel;
 
   // Debugging
   console.warn({ channel });
-  console.warn("New mention received", _message);
+  console.warn("New mention received", message);
 
-  await thread.post("Hello from WhatsApp!");
+  await thread.post(`Hola, ${message.author.userName}!`);
+});
+
+bot.onSubscribedMessage(async (thread, message) => {
+  console.warn("Subscribed message received", message);
 });
 
 bot.onReaction(async (event) => {
