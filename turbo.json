@@ -24,6 +24,7 @@
     "WHATSAPP_APP_SECRET",
     "WHATSAPP_PHONE_NUMBER_ID",
     "WHATSAPP_VERIFY_TOKEN",
+    "REDIS_URL",
     "PORT"
   ],
   "globalPassThroughEnv": [
