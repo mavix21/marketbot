@@ -11,6 +11,7 @@ const bot = new Chat({
 });
 
 bot.onNewMention(async (thread, _message) => {
+  console.warn("New mention received", _message);
   await thread.post("Hello from WhatsApp!");
 });
 
