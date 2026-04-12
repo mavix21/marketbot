@@ -47,7 +47,10 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
   } catch (e) {
     console.error("Error fetching messages:", e);
     await thread.post({ markdown: "Hubo un error procesando tu mensaje" });
+
     return;
+  } finally {
+    await thread.adapter.removeReaction(thread.id, message.id, emoji.hourglass);
   }
 
   try {
@@ -57,10 +60,13 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
         You are allowed to use the following markdown elements: **bold**, _italic_ and \`code\`. Use them only when necessary.`,
       messages: history,
     });
+    console.log({ text });
 
     await thread.post({ markdown: text });
   } catch (error) {
     console.error("Error generating response:", error);
     await thread.post({ markdown: "Hubo un error generando la respuesta" });
+  } finally {
+    await thread.adapter.removeReaction(thread.id, message.id, emoji.hourglass);
   }
 }
