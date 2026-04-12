@@ -1,5 +1,5 @@
 import type { Thread, Message } from "chat";
-import { Chat, emoji } from "chat";
+import { Chat, emoji, toAiMessages } from "chat";
 import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
 import { createRedisState } from "@chat-adapter/state-redis";
 import { generateText } from "ai";
@@ -31,19 +31,13 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
   await thread.adapter.addReaction(thread.id, message.id, emoji.hourglass);
 
   try {
-    let history: { role: "user" | "assistant"; content: string }[] = [];
+    let history;
 
     try {
       const messages = await getThreadMessages(thread);
-      history = messages
-        .slice(0, -1)
-        .filter((msg) => msg.text.trim() !== "")
-        .map((msg) => ({
-          role: msg.author.isMe ? ("assistant" as const) : ("user" as const),
-          content: msg.text,
-        }));
+      history = await toAiMessages(messages);
       if (history.length === 0) {
-        history = [{ role: "user", content: message.text }];
+        history = [{ role: "user" as const, content: message.text }];
       }
       console.dir({ history }, { depth: null });
     } catch (e) {
@@ -61,7 +55,7 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
     });
     console.log({ text });
 
-    await thread.post({ markdown: text });
+    await thread.post({ markdown: text || "No pude generar una respuesta." });
   } catch (error) {
     console.error("Error generating response:", error);
     await thread.post({ markdown: "Hubo un error generando la respuesta" });
@@ -76,10 +70,10 @@ async function getThreadMessages(thread: Thread): Promise<Message[]> {
     const result = await thread.adapter.fetchMessages(thread.id, { limit: 100 });
     messages = result.messages;
   } else {
-    for await (const message of thread.allMessages) {
+    for await (const message of thread.messages) {
       messages.push(message);
+      if (messages.length >= 100) break;
     }
-    messages = messages.slice(-100);
   }
   return messages;
 }
