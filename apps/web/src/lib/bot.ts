@@ -41,6 +41,9 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
         role: msg.author.isMe ? ("assistant" as const) : ("user" as const),
         content: msg.text,
       }));
+    if (history.length === 0) {
+      history = [{ role: "user", content: message.text }];
+    }
   } catch (e) {
     console.error("Error fetching messages:", e);
     await thread.post({ markdown: "Hubo un error procesando tu mensaje" });
