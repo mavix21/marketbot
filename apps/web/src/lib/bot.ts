@@ -33,6 +33,7 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
   let history: { role: "user" | "assistant"; content: string }[] = [];
   try {
     const result = await thread.adapter.fetchMessages(thread.id, { limit: 100 });
+    console.log({ messages: result.messages });
     history = result.messages
       .slice(0, -1)
       .filter((msg) => msg.text.trim() !== "")
@@ -42,6 +43,8 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
       }));
   } catch (e) {
     console.error("Error fetching messages:", e);
+    await thread.post({ markdown: "Hubo un error procesando tu mensaje" });
+    return;
   }
 
   try {
@@ -55,5 +58,6 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
     await thread.post({ markdown: text });
   } catch (error) {
     console.error("Error generating response:", error);
+    await thread.post({ markdown: "Hubo un error generando la respuesta" });
   }
 }
