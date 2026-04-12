@@ -76,10 +76,10 @@ async function getThreadMessages(thread: Thread): Promise<Message[]> {
     const result = await thread.adapter.fetchMessages(thread.id, { limit: 100 });
     messages = result.messages;
   } else {
-    for await (const message of thread.messages) {
+    for await (const message of thread.allMessages) {
       messages.push(message);
-      if (messages.length >= 100) break;
     }
+    messages = messages.slice(-100);
   }
   return messages;
 }
