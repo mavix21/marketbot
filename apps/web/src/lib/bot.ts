@@ -4,6 +4,8 @@ import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
 import { createRedisState } from "@chat-adapter/state-redis";
 import { generateText } from "ai";
 import { google } from "@ai-sdk/google";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export const bot = new Chat({
   userName: "delfos",
@@ -27,6 +29,16 @@ bot.onSubscribedMessage(async (thread, message) => {
 });
 
 async function handleMessage({ thread, message }: { thread: Thread; message: Message }) {
+  if (message.text.trim().toLowerCase() === "audio") {
+    const audioPath = join(process.cwd(), "public", "audio_file_example.mp3");
+    const data = await readFile(audioPath);
+    await thread.post({
+      markdown: "",
+      files: [{ data, filename: "audio_file_example.mp3", mimeType: "audio/mpeg" }],
+    });
+    return;
+  }
+
   await thread.startTyping();
   await thread.adapter.addReaction(thread.id, message.id, emoji.hourglass);
 
