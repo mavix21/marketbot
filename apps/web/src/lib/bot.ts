@@ -45,7 +45,7 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
       if (history.length === 0) {
         history = [{ role: "user", content: message.text }];
       }
-      console.log({ messages });
+      console.dir({ history }, { depth: null });
     } catch (e) {
       console.error("Error fetching messages:", e);
       await thread.post({ markdown: "Hubo un error procesando tu mensaje" });
