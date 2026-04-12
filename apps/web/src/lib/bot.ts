@@ -1,6 +1,9 @@
-import { Actions, Card, Button, Chat, emoji } from "chat";
+import type { Thread, Message } from "chat";
+import { Chat, emoji } from "chat";
 import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
 import { createRedisState } from "@chat-adapter/state-redis";
+import { generateText } from "ai";
+import { google } from "@ai-sdk/google";
 
 export const bot = new Chat({
   userName: "delfos",
@@ -13,45 +16,44 @@ export const bot = new Chat({
 
 bot.onNewMention(async (thread, message) => {
   await thread.subscribe();
-  await thread.startTyping();
   await thread.adapter.addReaction(thread.id, message.id, emoji.wave);
 
-  console.warn("New mention received", message);
-
   await thread.post({ markdown: `Hola, **${message.author.userName}**!` });
+  handleMessage({ thread, message });
 });
 
 bot.onSubscribedMessage(async (thread, message) => {
-  await thread.startTyping();
-
-  // Build conversation history from thread messages
-  const messages = [];
-  for await (const msg of thread.allMessages) {
-    messages.push(msg);
-  }
-  console.warn("All messages in thread", messages);
-
-  if (message.text.match(/^card$/i)) {
-    await thread.post(
-      Card({
-        title: "Card Title",
-        children: [
-          "Ejemplo de texto en el card",
-          Actions([
-            Button({ id: "approve", label: "Approve", style: "primary" }),
-            Button({ id: "reject", label: "Reject", style: "danger" }),
-          ]),
-        ],
-      }),
-    );
-    return;
-  }
-
-  if (message.text.match(/^ga+$/i)) {
-    await thread.adapter.addReaction(thread.id, message.id, emoji.laugh);
-    await thread.post({ markdown: "GAAAAAAA" });
-    return;
-  }
-
-  await thread.post({ markdown: "Escuchando desde el hilo..." });
+  handleMessage({ thread, message });
 });
+
+async function handleMessage({ thread, message }: { thread: Thread; message: Message }) {
+  await thread.startTyping();
+  await thread.adapter.addReaction(thread.id, message.id, emoji.hourglass);
+
+  let history: { role: "user" | "assistant"; content: string }[] = [];
+  try {
+    const result = await thread.adapter.fetchMessages(thread.id, { limit: 100 });
+    history = result.messages
+      .slice(0, -1)
+      .filter((msg) => msg.text.trim() !== "")
+      .map((msg) => ({
+        role: msg.author.isMe ? ("assistant" as const) : ("user" as const),
+        content: msg.text,
+      }));
+  } catch (e) {
+    console.error("Error fetching messages:", e);
+  }
+
+  try {
+    const { text } = await generateText({
+      model: google("gemini-2.5-flash"),
+      system: `You are a friendly support bot. Answer questions concisely.
+        You are allowed to use the following markdown elements: **bold**, _italic_ and \`code\`. Use them only when necessary.`,
+      messages: history,
+    });
+
+    await thread.post({ markdown: text });
+  } catch (error) {
+    console.error("Error generating response:", error);
+  }
+}
