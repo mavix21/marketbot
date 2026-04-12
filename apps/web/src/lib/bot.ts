@@ -33,7 +33,7 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
     const audioPath = join(process.cwd(), "public", "audio_file_example.mp3");
     const data = await readFile(audioPath);
     await thread.post({
-      markdown: "",
+      markdown: "Aquí tienes el audio:",
       files: [{ data, filename: "audio_file_example.mp3", mimeType: "audio/mpeg" }],
     });
     return;
