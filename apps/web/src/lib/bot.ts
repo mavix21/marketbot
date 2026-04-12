@@ -32,9 +32,10 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
 
   try {
     let history: { role: "user" | "assistant"; content: string }[] = [];
+
     try {
-      const result = await thread.adapter.fetchMessages(thread.id, { limit: 100 });
-      history = result.messages
+      const messages = await getThreadMessages(thread);
+      history = messages
         .slice(0, -1)
         .filter((msg) => msg.text.trim() !== "")
         .map((msg) => ({
@@ -44,7 +45,7 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
       if (history.length === 0) {
         history = [{ role: "user", content: message.text }];
       }
-      console.log({ messages: result.messages });
+      console.log({ messages });
     } catch (e) {
       console.error("Error fetching messages:", e);
       await thread.post({ markdown: "Hubo un error procesando tu mensaje" });
@@ -67,4 +68,18 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
   } finally {
     await thread.adapter.removeReaction(thread.id, message.id, emoji.hourglass);
   }
+}
+
+async function getThreadMessages(thread: Thread): Promise<Message[]> {
+  let messages: Message[] = [];
+  if (thread.adapter.name !== "whatsapp") {
+    const result = await thread.adapter.fetchMessages(thread.id, { limit: 100 });
+    messages = result.messages;
+  } else {
+    for await (const message of thread.messages) {
+      messages.push(message);
+      if (messages.length >= 100) break;
+    }
+  }
+  return messages;
 }
