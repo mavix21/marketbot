@@ -19,41 +19,39 @@ bot.onNewMention(async (thread, message) => {
   await thread.adapter.addReaction(thread.id, message.id, emoji.wave);
 
   await thread.post({ markdown: `Hola, **${message.author.userName}**!` });
-  handleMessage({ thread, message });
+  await handleMessage({ thread, message });
 });
 
 bot.onSubscribedMessage(async (thread, message) => {
-  handleMessage({ thread, message });
+  await handleMessage({ thread, message });
 });
 
 async function handleMessage({ thread, message }: { thread: Thread; message: Message }) {
   await thread.startTyping();
   await thread.adapter.addReaction(thread.id, message.id, emoji.hourglass);
 
-  let history: { role: "user" | "assistant"; content: string }[] = [];
   try {
-    const result = await thread.adapter.fetchMessages(thread.id, { limit: 100 });
-    console.log({ messages: result.messages });
-    history = result.messages
-      .slice(0, -1)
-      .filter((msg) => msg.text.trim() !== "")
-      .map((msg) => ({
-        role: msg.author.isMe ? ("assistant" as const) : ("user" as const),
-        content: msg.text,
-      }));
-    if (history.length === 0) {
-      history = [{ role: "user", content: message.text }];
+    let history: { role: "user" | "assistant"; content: string }[] = [];
+    try {
+      const result = await thread.adapter.fetchMessages(thread.id, { limit: 100 });
+      history = result.messages
+        .slice(0, -1)
+        .filter((msg) => msg.text.trim() !== "")
+        .map((msg) => ({
+          role: msg.author.isMe ? ("assistant" as const) : ("user" as const),
+          content: msg.text,
+        }));
+      if (history.length === 0) {
+        history = [{ role: "user", content: message.text }];
+      }
+      console.log({ messages: result.messages });
+    } catch (e) {
+      console.error("Error fetching messages:", e);
+      await thread.post({ markdown: "Hubo un error procesando tu mensaje" });
+
+      return;
     }
-  } catch (e) {
-    console.error("Error fetching messages:", e);
-    await thread.post({ markdown: "Hubo un error procesando tu mensaje" });
 
-    return;
-  } finally {
-    await thread.adapter.removeReaction(thread.id, message.id, emoji.hourglass);
-  }
-
-  try {
     const { text } = await generateText({
       model: google("gemini-2.5-flash"),
       system: `You are a friendly support bot. Answer questions concisely.
