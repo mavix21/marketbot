@@ -1,11 +1,12 @@
 import type { Thread, Message } from "chat";
 import { Chat, emoji, toAiMessages } from "chat";
-import { createWhatsAppAdapter, WhatsAppAdapter } from "@chat-adapter/whatsapp";
+import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
 import { createRedisState } from "@chat-adapter/state-redis";
-import { generateText } from "ai";
+import { generateText, stepCountIs } from "ai";
 import { google } from "@ai-sdk/google";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { sendWhatsAppAudio } from "./whatsapp";
+import { polymarketTools } from "./polymarket";
+import { extractPhoneNumber } from "./phone";
 
 export const bot = new Chat({
   userName: "delfos",
@@ -46,7 +47,6 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
       if (history.length === 0) {
         history = [{ role: "user" as const, content: message.text }];
       }
-      console.dir({ history }, { depth: null });
     } catch (e) {
       console.error("Error fetching messages:", e);
       await thread.post({ markdown: "Hubo un error procesando tu mensaje" });
@@ -54,13 +54,25 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
       return;
     }
 
+    const phoneNumber = extractPhoneNumber(thread);
+
     const { text } = await generateText({
       model: google("gemini-2.5-flash"),
-      system: `You are a friendly support bot. Answer questions concisely.
-        You are allowed to use the following markdown elements: **bold**, _italic_ and \`code\`. Use them only when necessary.`,
+      system: [
+        "You are a friendly crypto assistant bot on WhatsApp.",
+        "You can create Polygon smart wallets for users and check their wallet address.",
+        "You are allowed to use the following markdown elements: **bold**, _italic_ and `code`. Use them only when necessary.",
+        phoneNumber
+          ? `The user's phone number is ${phoneNumber}. Use it when calling wallet tools.`
+          : "Could not detect the user's phone number. Ask them to provide it if they want wallet features.",
+        "When a user wants to create a wallet, first call createWallet with confirmed=false to ask for confirmation.",
+        "Only call createWallet with confirmed=true after the user explicitly confirms.",
+        "After wallet creation, share the address with the user.",
+      ].join("\n"),
+      tools: polymarketTools,
+      stopWhen: stepCountIs(4),
       messages: history,
     });
-    console.log({ text });
 
     await thread.post({ markdown: text || "No pude generar una respuesta." });
   } catch (error) {
@@ -83,62 +95,4 @@ async function getThreadMessages(thread: Thread): Promise<Message[]> {
     }
   }
   return messages;
-}
-
-async function sendWhatsAppAudio(thread: Thread): Promise<void> {
-  if (!(thread.adapter instanceof WhatsAppAdapter)) {
-    await thread.post({ markdown: "El envío de audio solo está disponible en WhatsApp." });
-    return;
-  }
-
-  const { userWaId } = thread.adapter.decodeThreadId(thread.id);
-  const audioPath = join(process.cwd(), "public", "audio_file_example.mp3");
-  const data = await readFile(audioPath);
-
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN!;
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID!;
-  const graphApiUrl = "https://graph.facebook.com/v21.0";
-
-  // 1. Upload media to WhatsApp
-  const form = new FormData();
-  form.append("messaging_product", "whatsapp");
-  form.append("type", "audio/mpeg");
-  form.append("file", new Blob([data], { type: "audio/mpeg" }), "audio_file_example.mp3");
-
-  const uploadRes = await fetch(`${graphApiUrl}/${phoneNumberId}/media`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: form,
-  });
-
-  if (!uploadRes.ok) {
-    const err = await uploadRes.text();
-    console.error("WhatsApp media upload failed:", err);
-    await thread.post({ markdown: "No se pudo subir el archivo de audio." });
-    return;
-  }
-
-  const { id: mediaId } = (await uploadRes.json()) as { id: string };
-
-  // 2. Send audio message
-  const sendRes = await fetch(`${graphApiUrl}/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: userWaId,
-      type: "audio",
-      audio: { id: mediaId },
-    }),
-  });
-
-  if (!sendRes.ok) {
-    const err = await sendRes.text();
-    console.error("WhatsApp audio send failed:", err);
-    await thread.post({ markdown: "No se pudo enviar el audio." });
-  }
 }
