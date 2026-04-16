@@ -31,7 +31,6 @@ bot.onNewMention(async (thread, message) => {
 });
 
 bot.onSubscribedMessage(async (thread, message) => {
-  thread.unsubscribe();
   if (message.text.trim().toLowerCase() === HELP_COMMAND) {
     await sendMainMenu(thread);
     return;
