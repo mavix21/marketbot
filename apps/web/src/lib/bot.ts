@@ -60,7 +60,7 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
       model: google("gemini-2.5-flash"),
       system: [
         "You are a friendly crypto assistant bot on WhatsApp.",
-        "You can create Polygon smart wallets for users and check their wallet address.",
+        "You can create Polygon smart wallets for users, check their wallet address, and check their USDC balance.",
         "You are allowed to use the following markdown elements: **bold**, _italic_ and `code`. Use them only when necessary.",
         phoneNumber
           ? `The user's phone number is ${phoneNumber}. Use it when calling wallet tools.`
@@ -70,7 +70,7 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
         "After wallet creation, share the address with the user.",
       ].join("\n"),
       tools: polymarketTools,
-      stopWhen: stepCountIs(4),
+      stopWhen: stepCountIs(8),
       messages: history,
     });
 

@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { createUserWallet, getUserSafeAddress } from "./wallet";
+import { createUserWallet, getUserSafeAddress, getUserBalance } from "./wallet";
 
 export const polymarketTools = {
   createWallet: tool({
@@ -64,6 +64,34 @@ export const polymarketTools = {
         };
       }
       return { status: "found" as const, safeAddress: address };
+    },
+  }),
+
+  getBalance: tool({
+    description:
+      "Get the USDC balance of the user's Polygon wallet. " +
+      "Call this when the user asks about their balance or funds.",
+    inputSchema: z.object({
+      phoneNumber: z.string().describe("The user's phone number including country code"),
+    }),
+    execute: async ({ phoneNumber }) => {
+      try {
+        const result = await getUserBalance(phoneNumber);
+        if (!result) {
+          return {
+            status: "no_wallet" as const,
+            message: "No wallet found. Ask if they want to create one.",
+          };
+        }
+        return {
+          status: "success" as const,
+          safeAddress: result.safeAddress,
+          usdc: result.usdc,
+        };
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : "Unknown error";
+        return { status: "error" as const, message: msg };
+      }
     },
   }),
 };
