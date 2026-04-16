@@ -111,7 +111,11 @@ async function handleWalletCreate(thread: Thread<unknown>): Promise<void> {
     const result = await createUserWallet(phoneNumber);
     const title = result.alreadyExisted ? "Ya tenías una wallet" : "¡Wallet creada!";
     await thread.post({
-      markdown: `💸 *${title}*\n\nDirección:\n\`${result.safeAddress}\``,
+      markdown: `💸 *${title}*\n\nDirección:`,
+    });
+    // Easier for the user to copy
+    await thread.post({
+      markdown: `\`${result.safeAddress}\``,
     });
   } catch (error) {
     console.error("Error creating wallet:", error);
