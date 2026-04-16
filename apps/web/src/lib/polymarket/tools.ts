@@ -2,14 +2,34 @@ import { tool } from "ai";
 import { z } from "zod";
 import { createUserWallet, getUserSafeAddress, getUserBalance } from "./wallet";
 
+export type PolymarketToolContext = {
+  phoneNumber: string | null;
+};
+
+function requirePhone(
+  context: unknown,
+):
+  | { ok: true; phoneNumber: string }
+  | { ok: false; error: { status: "no_phone"; message: string } } {
+  const phoneNumber = (context as PolymarketToolContext | undefined)?.phoneNumber;
+  if (!phoneNumber) {
+    return {
+      ok: false,
+      error: {
+        status: "no_phone" as const,
+        message: "Could not identify the user's phone number. This feature only works on WhatsApp.",
+      },
+    };
+  }
+  return { ok: true, phoneNumber };
+}
+
 export const polymarketTools = {
   createWallet: tool({
     description:
       "Create a new Polygon smart account (Safe wallet) for the user. " +
-      "Call this when the user wants to create a wallet/account. " +
-      "Requires the user's phone number.",
+      "Call this when the user wants to create a wallet/account.",
     inputSchema: z.object({
-      phoneNumber: z.string().describe("The user's phone number including country code"),
       confirmed: z
         .boolean()
         .describe(
@@ -17,7 +37,7 @@ export const polymarketTools = {
             "If false, ask for confirmation first before calling again with true.",
         ),
     }),
-    execute: async ({ phoneNumber, confirmed }) => {
+    execute: async ({ confirmed }, { experimental_context }) => {
       if (!confirmed) {
         return {
           status: "pending_confirmation" as const,
@@ -25,8 +45,11 @@ export const polymarketTools = {
         };
       }
 
+      const phone = requirePhone(experimental_context);
+      if (!phone.ok) return phone.error;
+
       try {
-        const result = await createUserWallet(phoneNumber);
+        const result = await createUserWallet(phone.phoneNumber);
 
         if (result.alreadyExisted) {
           return {
@@ -52,11 +75,12 @@ export const polymarketTools = {
     description:
       "Get the user's existing Polygon wallet address. " +
       "Call this when the user asks about their wallet or address.",
-    inputSchema: z.object({
-      phoneNumber: z.string().describe("The user's phone number including country code"),
-    }),
-    execute: async ({ phoneNumber }) => {
-      const address = await getUserSafeAddress(phoneNumber);
+    inputSchema: z.object({}),
+    execute: async (_input, { experimental_context }) => {
+      const phone = requirePhone(experimental_context);
+      if (!phone.ok) return phone.error;
+
+      const address = await getUserSafeAddress(phone.phoneNumber);
       if (!address) {
         return {
           status: "not_found" as const,
@@ -71,12 +95,13 @@ export const polymarketTools = {
     description:
       "Get the USDC balance of the user's Polygon wallet. " +
       "Call this when the user asks about their balance or funds.",
-    inputSchema: z.object({
-      phoneNumber: z.string().describe("The user's phone number including country code"),
-    }),
-    execute: async ({ phoneNumber }) => {
+    inputSchema: z.object({}),
+    execute: async (_input, { experimental_context }) => {
+      const phone = requirePhone(experimental_context);
+      if (!phone.ok) return phone.error;
+
       try {
-        const result = await getUserBalance(phoneNumber);
+        const result = await getUserBalance(phone.phoneNumber);
         if (!result) {
           return {
             status: "no_wallet" as const,

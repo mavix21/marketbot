@@ -2,11 +2,9 @@ import type { Thread, Message } from "chat";
 import { Chat, emoji, toAiMessages } from "chat";
 import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
 import { createRedisState } from "@chat-adapter/state-redis";
-import { generateText, stepCountIs } from "ai";
-import { google } from "@ai-sdk/google";
 import { sendWhatsAppAudio } from "./whatsapp";
-import { polymarketTools } from "./polymarket";
 import { extractPhoneNumber } from "./phone";
+import { delfosAgent } from "./agent";
 
 export const bot = new Chat({
   userName: "delfos",
@@ -54,23 +52,8 @@ async function handleMessage({ thread, message }: { thread: Thread; message: Mes
       return;
     }
 
-    const phoneNumber = extractPhoneNumber(thread);
-
-    const { text } = await generateText({
-      model: google("gemini-2.5-flash"),
-      system: [
-        "You are a friendly crypto assistant bot on WhatsApp.",
-        "You can create Polygon smart wallets for users, check their wallet address, and check their USDC balance.",
-        "You are allowed to use the following markdown elements: **bold**, _italic_ and `code`. Use them only when necessary.",
-        phoneNumber
-          ? `The user's phone number is ${phoneNumber}. Use it when calling wallet tools.`
-          : "Could not detect the user's phone number. Ask them to provide it if they want wallet features.",
-        "When a user wants to create a wallet, first call createWallet with confirmed=false to ask for confirmation.",
-        "Only call createWallet with confirmed=true after the user explicitly confirms.",
-        "After wallet creation, share the address with the user.",
-      ].join("\n"),
-      tools: polymarketTools,
-      stopWhen: stepCountIs(8),
+    const { text } = await delfosAgent.generate({
+      options: { phoneNumber: extractPhoneNumber(thread) },
       messages: history,
     });
 
