@@ -83,7 +83,11 @@ async function handleWalletMenu(thread: Thread<unknown>): Promise<void> {
   const existing = await getUserSafeAddress(phoneNumber);
   if (existing) {
     await thread.post({
-      markdown: `💸 *Tu wallet ya existe*\n\nDirección:\n\`${existing}\``,
+      markdown: `💸 *Tu wallet ya existe*\n\nDirección:`,
+    });
+    // Easier for the user to copy
+    await thread.post({
+      markdown: `\`${existing}\``,
     });
     return;
   }
