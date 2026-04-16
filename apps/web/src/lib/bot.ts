@@ -87,7 +87,7 @@ async function handleWalletMenu(thread: Thread<unknown>): Promise<void> {
     });
     // Easier for the user to copy
     await thread.post({
-      markdown: `\`${existing}\``,
+      markdown: `${existing}`,
     });
     return;
   }
@@ -119,7 +119,7 @@ async function handleWalletCreate(thread: Thread<unknown>): Promise<void> {
     });
     // Easier for the user to copy
     await thread.post({
-      markdown: `\`${result.safeAddress}\``,
+      markdown: `${result.safeAddress}`,
     });
   } catch (error) {
     console.error("Error creating wallet:", error);
