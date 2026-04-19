@@ -6,6 +6,7 @@ import { sendWhatsAppButtons } from "./whatsapp";
 import { extractPhoneNumber } from "./phone";
 import { sendMainMenu, MENU_ACTIONS, ALL_MENU_ACTIONS } from "./menu";
 import { createUserWallet, getUserSafeAddress } from "./polymarket";
+import { sendTrending } from "./trending";
 
 const WALLET_CONFIRM_ACTION = "wallet_create_confirm";
 const WALLET_CANCEL_ACTION = "wallet_create_cancel";
@@ -47,6 +48,8 @@ bot.onAction(ALL_MENU_ACTIONS, async (event) => {
       await handleWalletMenu(thread);
       return;
     case MENU_ACTIONS.TRENDING:
+      await sendTrending(thread);
+      return;
     case MENU_ACTIONS.ENDING_SOON:
     case MENU_ACTIONS.RANDOM:
     case MENU_ACTIONS.SEARCH:
