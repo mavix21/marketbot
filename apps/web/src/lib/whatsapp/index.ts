@@ -131,6 +131,42 @@ export async function sendWhatsAppButtons(
   });
 }
 
+export interface SendImageOptions {
+  /** Publicly accessible image URL (WhatsApp will download it). */
+  imageUrl: string;
+  /** Optional caption shown below the image (max 1024 chars). */
+  caption?: string;
+}
+
+/**
+ * Send an image message by hosted URL. Uses the Graph API directly because the
+ * Chat SDK's WhatsApp adapter does not currently render outbound images
+ * (Card <Image> / imageUrl become plain text with preview_url disabled).
+ */
+export async function sendWhatsAppImage(
+  thread: Thread<unknown>,
+  options: SendImageOptions,
+): Promise<boolean> {
+  const ctx = getWhatsAppContext(thread);
+  if (!ctx) {
+    if (options.caption) {
+      await thread.post({ markdown: options.caption });
+    }
+    return false;
+  }
+
+  return postGraphApi(`/${ctx.phoneNumberId}/messages`, ctx.accessToken, {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: ctx.userWaId,
+    type: "image",
+    image: {
+      link: options.imageUrl,
+      ...(options.caption ? { caption: options.caption.slice(0, 1024) } : {}),
+    },
+  });
+}
+
 export async function sendWhatsAppAudio(thread: Thread<unknown>): Promise<void> {
   const ctx = getWhatsAppContext(thread);
   if (!ctx) {

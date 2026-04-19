@@ -1,6 +1,6 @@
 /** @jsxImportSource chat */
 import type { Thread } from "chat";
-import { Card, CardText, Divider, Field, Fields, Image } from "chat";
+import { Card, CardText, Divider, Field, Fields } from "chat";
 import {
   buildDisplayOutcomes,
   getTrendingEvents,
@@ -8,6 +8,7 @@ import {
   type GammaEvent,
 } from "./polymarket/gamma";
 import { buildQuickChartUrl, getPriceHistory } from "./polymarket/charts";
+import { sendWhatsAppImage } from "./whatsapp";
 
 const POLYMARKET_EVENT_URL = "https://polymarket.com/event";
 const MAX_EVENTS_TO_SHOW = 3;
@@ -63,11 +64,23 @@ async function buildEventChartUrl(outcomes: DisplayOutcome[]): Promise<string | 
 
 async function postEventCard(thread: Thread<unknown>, event: GammaEvent): Promise<void> {
   const outcomes = buildDisplayOutcomes(event).slice(0, MAX_OUTCOMES_PER_CARD);
-  const chartUrl = await buildEventChartUrl(outcomes);
   const eventUrl = `${POLYMARKET_EVENT_URL}/${event.slug}`;
 
+  // Chart URL is still computed (useful for logging / future reuse) but not rendered yet.
+  const chartUrl = await buildEventChartUrl(outcomes);
+  if (chartUrl) {
+    console.debug(`[trending] chart for ${event.slug}: ${chartUrl}`);
+  }
+
+  if (event.image) {
+    await sendWhatsAppImage(thread, {
+      imageUrl: event.image,
+      caption: event.title,
+    });
+  }
+
   await thread.post(
-    <Card title={event.title} subtitle={buildSubtitle(event)} imageUrl={event.image}>
+    <Card title={event.title} subtitle={buildSubtitle(event)}>
       {outcomes.length > 0 ? (
         <Fields>
           {outcomes.map((o) => (
@@ -77,7 +90,6 @@ async function postEventCard(thread: Thread<unknown>, event: GammaEvent): Promis
       ) : (
         <CardText>Sin mercados activos en este momento.</CardText>
       )}
-      {chartUrl ? <Image url={chartUrl} alt="Evolución" /> : null}
       <Divider />
       <CardText>Ver mercado: {eventUrl}</CardText>
     </Card>,
