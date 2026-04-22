@@ -63,7 +63,7 @@ async function handleIncoming(thread: Thread<unknown>, message: Message): Promis
 
   if (!detected) {
     await typedThread.post({
-      markdown: "� Envíame un archivo *PDF* o *Word (.docx)* y lo convierto por ti.",
+      markdown: "Envíame un archivo *PDF* o *Word (.docx)* y lo convierto por ti.",
     });
     return;
   }
