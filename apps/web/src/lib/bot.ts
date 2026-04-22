@@ -3,6 +3,14 @@ import { Chat, Card, CardText, Actions, Button } from "chat";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createRedisState } from "@chat-adapter/state-redis";
 import { pdfToDocx, docxToPdf } from "./convert";
+import {
+  DEMO_ACTION_IDS,
+  handleDemoAction,
+  handleReaction,
+  isDemoTrigger,
+  sendDemoMenu,
+  type DemoState,
+} from "./demo";
 
 type PendingKind = "pdf" | "docx";
 
@@ -12,7 +20,7 @@ interface PendingFile {
   dataBase64: string;
 }
 
-interface BotThreadState {
+export interface BotThreadState extends DemoState {
   pending?: PendingFile;
 }
 
@@ -57,13 +65,22 @@ bot.onAction(CONVERT_TO_PDF, async (event) => {
   await runConversion(thread as Thread<BotThreadState>, "docx");
 });
 
+bot.onAction(DEMO_ACTION_IDS, handleDemoAction);
+
+bot.onReaction(handleReaction);
+
 async function handleIncoming(thread: Thread<unknown>, message: Message): Promise<void> {
   const typedThread = thread as Thread<BotThreadState>;
   const detected = detectConvertible(message);
 
   if (!detected) {
+    if (isDemoTrigger(message.text ?? "")) {
+      await sendDemoMenu(typedThread);
+      return;
+    }
     await typedThread.post({
-      markdown: "Envíame un archivo *PDF* o *Word (.docx)* y lo convierto por ti.",
+      markdown:
+        "Envíame un archivo *PDF* o *Word (.docx)* y lo convierto por ti.\n\nEscribe *!demo* para ver un menú con funciones del SDK.",
     });
     return;
   }
