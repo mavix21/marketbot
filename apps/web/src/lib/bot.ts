@@ -1,21 +1,31 @@
-import type { Thread } from "chat";
-import { Chat, emoji } from "chat";
-import { createWhatsAppAdapter } from "@chat-adapter/whatsapp";
+import type { Thread, Message } from "chat";
+import { Chat, Card, CardText, Actions, Button } from "chat";
+import { createTelegramAdapter } from "@chat-adapter/telegram";
 import { createRedisState } from "@chat-adapter/state-redis";
-import { sendWhatsAppButtons } from "./whatsapp";
-import { extractPhoneNumber } from "./phone";
-import { sendMainMenu, MENU_ACTIONS, ALL_MENU_ACTIONS } from "./menu";
-import { createUserWallet, getUserSafeAddress } from "./polymarket";
-import { sendTrending } from "./trending";
+import { pdfToDocx, docxToPdf } from "./convert";
 
-const WALLET_CONFIRM_ACTION = "wallet_create_confirm";
-const WALLET_CANCEL_ACTION = "wallet_create_cancel";
-const HELP_COMMAND = "!help";
+type PendingKind = "pdf" | "docx";
+
+interface PendingFile {
+  kind: PendingKind;
+  filename: string;
+  dataBase64: string;
+}
+
+interface BotThreadState {
+  pending?: PendingFile;
+}
+
+const CONVERT_TO_WORD = "convert_to_word";
+const CONVERT_TO_PDF = "convert_to_pdf";
+
+const PDF_MIME = "application/pdf";
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export const bot = new Chat({
-  userName: "delfos",
+  userName: "ilofpdfbot",
   adapters: {
-    whatsapp: createWhatsAppAdapter(),
+    telegram: createTelegramAdapter(),
   },
   state: createRedisState(),
   logger: "info",
@@ -23,155 +33,162 @@ export const bot = new Chat({
 
 bot.onNewMention(async (thread, message) => {
   await thread.subscribe();
-  await thread.adapter.addReaction(thread.id, message.id, emoji.wave);
+  await handleIncoming(thread, message);
+});
 
-  await thread.post({
-    markdown: `¡Hola, **${message.author.userName}**! Soy *delfos*, tu asistente de mercados de predicción.`,
-  });
-  await sendMainMenu(thread);
+bot.onDirectMessage(async (thread, message) => {
+  await thread.subscribe();
+  await handleIncoming(thread, message);
 });
 
 bot.onSubscribedMessage(async (thread, message) => {
-  if (message.text.trim().toLowerCase() === HELP_COMMAND) {
-    await sendMainMenu(thread);
-    return;
-  }
-  await handleMessage();
+  await handleIncoming(thread, message);
 });
 
-bot.onAction(ALL_MENU_ACTIONS, async (event) => {
+bot.onAction(CONVERT_TO_WORD, async (event) => {
   const thread = event.thread;
   if (!thread) return;
-
-  switch (event.actionId) {
-    case MENU_ACTIONS.WALLET:
-      await handleWalletMenu(thread);
-      return;
-    case MENU_ACTIONS.TRENDING:
-      await sendTrending(thread);
-      return;
-    case MENU_ACTIONS.ENDING_SOON:
-    case MENU_ACTIONS.RANDOM:
-    case MENU_ACTIONS.SEARCH:
-    case MENU_ACTIONS.RECOMMENDATIONS:
-    case MENU_ACTIONS.PORTFOLIO:
-      await thread.post({
-        markdown: `🛠️ Esta opción aún está en construcción. Escribe *${HELP_COMMAND}* para volver al menú.`,
-      });
-      return;
-  }
+  await runConversion(thread as Thread<BotThreadState>, "pdf");
 });
 
-bot.onAction([WALLET_CONFIRM_ACTION, WALLET_CANCEL_ACTION], async (event) => {
+bot.onAction(CONVERT_TO_PDF, async (event) => {
   const thread = event.thread;
   if (!thread) return;
-
-  if (event.actionId === WALLET_CANCEL_ACTION) {
-    await thread.post({
-      markdown: `Entendido, no se creó ninguna wallet. Escribe *${HELP_COMMAND}* para ver el menú.`,
-    });
-    return;
-  }
-
-  await handleWalletCreate(thread);
+  await runConversion(thread as Thread<BotThreadState>, "docx");
 });
 
-async function handleWalletMenu(thread: Thread<unknown>): Promise<void> {
-  const phoneNumber = extractPhoneNumber(thread);
-  if (!phoneNumber) {
-    await thread.post({ markdown: "Esta función solo está disponible en WhatsApp." });
-    return;
-  }
+async function handleIncoming(thread: Thread<unknown>, message: Message): Promise<void> {
+  const typedThread = thread as Thread<BotThreadState>;
+  const detected = detectConvertible(message);
 
-  const existing = await getUserSafeAddress(phoneNumber);
-  if (existing) {
-    await thread.post({
-      markdown: `💸 *Tu wallet ya existe*\n\nDirección:`,
-    });
-    // Easier for the user to copy
-    await thread.post({
-      markdown: `${existing}`,
+  if (!detected) {
+    await typedThread.post({
+      markdown: "� Envíame un archivo *PDF* o *Word (.docx)* y lo convierto por ti.",
     });
     return;
   }
 
-  await sendWhatsAppButtons(thread, {
-    header: "Crear wallet en Polygon",
-    body: "Voy a crear una *smart wallet* en Polygon asociada a tu número. Podrás depositar USDC y operar en Polymarket. ¿Quieres continuar?",
-    footer: "Esta acción es gratuita",
-    buttons: [
-      { id: WALLET_CONFIRM_ACTION, title: "✅ Sí, crear" },
-      { id: WALLET_CANCEL_ACTION, title: "❌ Cancelar" },
-    ],
+  let buffer: Buffer;
+  try {
+    buffer = await detected.attachment.fetchData!();
+  } catch (err) {
+    console.error("Error descargando archivo:", err);
+    await typedThread.post({
+      markdown: "❌ No pude descargar el archivo. Intenta enviarlo de nuevo.",
+    });
+    return;
+  }
+
+  await typedThread.setState({
+    pending: {
+      kind: detected.kind,
+      filename: detected.filename,
+      dataBase64: buffer.toString("base64"),
+    },
   });
+
+  if (detected.kind === "pdf") {
+    await typedThread.post(
+      Card({
+        title: "PDF recibido",
+        children: [
+          CardText(`📄 *${detected.filename}*\n\n¿Qué quieres hacer?`),
+          Actions([Button({ id: CONVERT_TO_WORD, label: "Convertir a Word", style: "primary" })]),
+        ],
+      }),
+    );
+  } else {
+    await typedThread.post(
+      Card({
+        title: "Documento Word recibido",
+        children: [
+          CardText(`📝 *${detected.filename}*\n\n¿Qué quieres hacer?`),
+          Actions([Button({ id: CONVERT_TO_PDF, label: "Convertir a PDF", style: "primary" })]),
+        ],
+      }),
+    );
+  }
 }
 
-async function handleWalletCreate(thread: Thread<unknown>): Promise<void> {
-  const phoneNumber = extractPhoneNumber(thread);
-  if (!phoneNumber) {
-    await thread.post({ markdown: "Esta función solo está disponible en WhatsApp." });
+async function runConversion(
+  thread: Thread<BotThreadState>,
+  expectedKind: PendingKind,
+): Promise<void> {
+  const state = await thread.state;
+  const pending = state?.pending;
+
+  if (!pending || pending.kind !== expectedKind) {
+    await thread.post({
+      markdown: "⚠️ No encuentro el archivo original. Envíamelo otra vez, por favor.",
+    });
     return;
   }
 
   await thread.startTyping();
+
   try {
-    const result = await createUserWallet(phoneNumber);
-    const title = result.alreadyExisted ? "Ya tenías una wallet" : "¡Wallet creada!";
+    const input = Buffer.from(pending.dataBase64, "base64");
+
+    if (pending.kind === "pdf") {
+      const docxBuffer = await pdfToDocx(input);
+      const outName = replaceExt(pending.filename, ".docx");
+      await thread.post({
+        markdown: `✅ Tu archivo convertido a Word:`,
+        files: [
+          {
+            data: docxBuffer,
+            filename: outName,
+            mimeType: DOCX_MIME,
+          },
+        ],
+      });
+    } else {
+      const pdfBuffer = await docxToPdf(input);
+      const outName = replaceExt(pending.filename, ".pdf");
+      await thread.post({
+        markdown: `✅ Tu archivo convertido a PDF:`,
+        files: [
+          {
+            data: pdfBuffer,
+            filename: outName,
+            mimeType: PDF_MIME,
+          },
+        ],
+      });
+    }
+  } catch (err) {
+    console.error("Error en conversión:", err);
     await thread.post({
-      markdown: `💸 *${title}*\n\nDirección:`,
+      markdown: "❌ Hubo un error convirtiendo el archivo. Intenta de nuevo.",
     });
-    // Easier for the user to copy
-    await thread.post({
-      markdown: `${result.safeAddress}`,
-    });
-  } catch (error) {
-    console.error("Error creating wallet:", error);
-    await thread.post({
-      markdown: "Hubo un error creando tu wallet. Intenta de nuevo en unos minutos.",
-    });
+  } finally {
+    await thread.setState({ pending: undefined });
   }
 }
 
-async function handleMessage() {
-  // No-op for now - will implement later
-  // await thread.startTyping();
-  // await thread.adapter.addReaction(thread.id, message.id, emoji.hourglass);
-  // try {
-  //   let history;
-  //   try {
-  //     const messages = await getThreadMessages(thread);
-  //     history = await toAiMessages(messages);
-  //     if (history.length === 0) {
-  //       history = [{ role: "user" as const, content: message.text }];
-  //     }
-  //   } catch (e) {
-  //     console.error("Error fetching messages:", e);
-  //     await thread.post({ markdown: "Hubo un error procesando tu mensaje" });
-  //     return;
-  //   }
-  //   const { text } = await delfosAgent.generate({
-  //     options: { phoneNumber: extractPhoneNumber(thread) },
-  //     messages: history,
-  //   });
-  //   await thread.post({ markdown: text || "No pude generar una respuesta." });
-  // } catch (error) {
-  //   console.error("Error generating response:", error);
-  //   await thread.post({ markdown: "Hubo un error generando la respuesta" });
-  // } finally {
-  //   await thread.adapter.removeReaction(thread.id, message.id, emoji.hourglass);
-  // }
+function detectConvertible(message: Message): {
+  kind: PendingKind;
+  filename: string;
+  attachment: NonNullable<Message["attachments"]>[number];
+} | null {
+  for (const att of message.attachments ?? []) {
+    if (!att.fetchData) continue;
+    const name = att.name ?? "archivo";
+    const lower = name.toLowerCase();
+    const mime = att.mimeType?.toLowerCase() ?? "";
+
+    if (mime === PDF_MIME || lower.endsWith(".pdf")) {
+      return { kind: "pdf", filename: name, attachment: att };
+    }
+    if (mime === DOCX_MIME || lower.endsWith(".docx")) {
+      return { kind: "docx", filename: name, attachment: att };
+    }
+  }
+  return null;
 }
 
-// async function getThreadMessages(thread: Thread): Promise<Message[]> {
-//   let messages: Message[] = [];
-//   if (thread.adapter.name !== "whatsapp") {
-//     const result = await thread.adapter.fetchMessages(thread.id, { limit: 100 });
-//     messages = result.messages;
-//   } else {
-//     for await (const message of thread.messages) {
-//       messages.push(message);
-//       if (messages.length >= 100) break;
-//     }
-//   }
-//   return messages;
-// }
+function replaceExt(filename: string, newExt: string): string {
+  const idx = filename.lastIndexOf(".");
+  const base = idx > 0 ? filename.slice(0, idx) : filename;
+  return `${base}${newExt}`;
+}
